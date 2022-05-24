@@ -1,0 +1,42 @@
+---
+title: "Pstat 131 Final Project"
+author: "Yu Tian"
+date: "Spring 2022-06-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      results = 'markup',
+                      fig.width = 4,
+                      fig.height = 3,
+                      fig.align = 'center',
+                      message = F,
+                      warning = F)
+
+# packages
+library(tidyverse)
+library(tidymodels)
+library(ISLR)
+library(ISLR2)
+library(ggplot2)
+library(corrplot)
+library(yardstick)
+library(readr)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR)
+```
+
+
+
+```{r}
+# Read the Pokemon data set into R using read_csv()
+Life_Exp <- read_csv(file = "Life Expectancy Data.csv") 
+Life_Exp %>% head()
+```
+
+
+
+
