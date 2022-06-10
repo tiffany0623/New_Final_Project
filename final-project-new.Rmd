@@ -1,0 +1,991 @@
+---
+title: "Pstat 131 Final Project"
+author: "Yu Tian"
+date: "Spring 2022-06-10"
+output:
+  html_document:
+    code_folding: hide    
+    toc: true
+    toc_float: TRUE
+    theme: united
+---
+
+```{r setip, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      results = 'markup',
+                      fig.width = 4,
+                      fig.height = 3,
+                      fig.align = 'center',
+                      message = F,
+                      warning = F)
+# packages
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+```
+
+# Introduction
+
+The purpose of this project is to study and predict the relationship between life expectancy and other related statistics (factors) of countries. Life expectancy is an estimate of how long a person would live on average for each country. As life expectancy is a very point indicate of people life quality, this study will help people understand how to improve people life quality. Also, because the observations in this data set come from different countries, it will be easier for a country to identify the predicting factor that contributes to a lower life expectancy value. This will assist in recommending to a country which areas should be prioritized in order to effectively raise the population's life expectancy. The data of this project comes from the Global Health Observatory (GHO) data repository under World Health Organization (WHO). Globally, life expectancy has increased by more than 6 years between 2000 and 2019 – from 66.8 years in 2000 to 73.4 years in 2019. We hope to find what's the most important issue behind that increase for life expectancy.
+
+This project contains 2 parts:
+
+The first part is to explore the relationships between these variables for model insight.
+
+The second part is to build models to find the important predictors of life expectancy.
+
+
+# Data
+
+## Load and Clean Data
+
+Here we load in the data, and present the first several rows of the data
+
+```{r}
+Life_Exp <- read_csv(file = "Life Expectancy Data.csv") %>% na.omit() 
+Life_Exp 
+```
+
+The original dataset contains 2938 observations and 22 variables. Since there are some missing values in the dataset, so we exclude related statistics in order to make the later process and models perform better.
+
+After cleaning data, the dataset now contains 1649 observations and 22 variables. These 1649 observations are from 133 countries, and recorded their life expectancy from 2000 to 2015. Notice: Some countries miss some year.
+
+## Preview Data
+
+The response variable of this dataset is Life expectany. This is a continuous variable ranged from 0 to 100.
+
+The predictor variables have two main types:
+
+1. Numeric variables:
+
+- * Years: ranged from 2000 to 2015
+
+- * Statistics about longetivity and mortality: Adult Mortality, infant deaths, under-five deaths, Population
+
+- * Statistics about economy: Total expenditure, GDP, Income composition of resources
+
+- * Statistics about illness: Hepatitis B, Measles, Polio, Diphtheria,  HIV/AIDS
+
+- * Statistics about people: Schooling,  thinness  1-19 years,  thinness 5-9 years,  BMI , Alcohol.
+
+2. Category variable:
+
+- * Country
+
+- * Status: Developing, Developed
+
+For the detailed description of these data, the `Adult.Mortality` column represents the adult mortality rates of both genders, which is the probability of dying between 15 and 60 years per 1000 population. `Infant.deaths` shows the number of infant deaths per 1000 population. The `Alcohol` column describes the total litres of consumption for pure alcohol recorded per capita for ages 15 and older. The `Hepatitis.B`, `Polio`, and `Diphteria` variables shows the percentage of immunization coverage among 1-year-olds for these diseases. The `Measles` column represents the number of reported cases of the measles per 1000 population. `thinness  1-19 years` represents the percentage of thinness present in children ranging from the age of 10 to 19 years old. `thinness 5-9 years` represents the percentage of thinness present in children ranging from the age of 10 to 19 years old.
+
+## Simple Analysis of Response Variable
+```{r}
+Life_Exp %>%
+  summarise(average=mean(`Life expectancy`), 
+            maximum=max(`Life expectancy`),
+            minimum=min(`Life expectancy`))
+```
+
+The life expectancy ranges from 44 to 89, so the people in the country with the highest life expectancy live almost twice as long as the ones in the country with the lowest life expectancy. Also, the average life expectancy is 69.3023, which is close to 70. This value is much higher than the past decades. Thus, it's significant to explore these situations and predict the future possibility. 
+
+# Explorarotory data analysis
+
+## Life Expectancy
+
+First, we can use histogram to roughly analyze the response variable "Life Expectancy" in the dataset, and later we will predict the life expectancy in our model.
+
+```{r}
+ggplot(Life_Exp, aes(`Life expectancy`)) +
+  geom_histogram(bins = 50, color = "white") +
+  labs(title = "Histogram of Life Expectancy") +
+  theme_bw()
+```
+
+From the histogram above, we can see that the distribution of life expectancy is a little light skewed. The range of life expectancy is from 44 to 89, and most life expectancy are concentrated from 60 to 80. Especially from 70 to 75, there is the highest count. Besides, the life expectancy, which are more than 85 and less than 50, have less count. Next, we will continue to explore the relationship between the life expectancy and other factors, which may affect the life expectancy.
+
+
+## Development status
+
+For the next question, Do developed countries significantly have higher life expectancy than the undeveloped countries? Regarding life expectancy and developed/developing countries, we can use EDA method and statistic method to answer this question and explore the relationship between the life expectancy and development status.
+
+
+First, we can use the histogram to directly display the the number of developed/developing countries.
+
+```{r}
+status_counting <- Life_Exp %>%
+    group_by(Status) %>%
+    summarise(Count = n())
+
+ggplot(data = status_counting, aes(x = Status, y = Count)) +
+  geom_histogram(bins = 50, stat = "identity", fill = c("red", "blue")) +
+  labs(title="Histogram of Development Status") +
+  theme_bw()
+```
+From the histogram we can see that the statistics of developing countries (more than 1250)is much more than developed countries (less than 250). The big difference is formed because there are more developing countries in the world.
+
+
+Then we can use a group boxplot to further illustrate that the developed countries has higher life expectancy. Here is the Life Expectancy against Development Status group box plot.
+
+```{r}
+library(ggstatsplot)
+plt <- ggbetweenstats(
+  data = Life_Exp,
+  x = Status, 
+  y = "Life expectancy",
+  plot.type = "box",
+  type = "p",
+  conf.level = 0.99,
+  title = "Parametric test",
+  bf.message = FALSE,
+  results.subtitle = FALSE
+)
+
+plt <- plt + 
+  # Add labels and title
+  labs(
+    x = "Development Status",
+    y = "Life Expectancy",
+    title = "Life Expectancy against Development Status"
+  )
+plt
+```
+
+From the boxplot, we can see there is  a stark difference in the life expectancy in developing and developed countries. The mean of developed countries is 78.69, and the mean of developing countries is 67.69. The median of developed countries is around 78, and the median of developing countries is around 70. Thus, Both the mean and median for developed countries life expectancy is much higher than the developing ones. Besides, the range of life expectancy for developed countries is around between 70 and 90. The range of life expectancy for developing countries is around between 45 and 90. Thus, The minimum life expectancy is also much lower in developing countries. 
+
+We can also apply parametric t test to illustrate that difference is significant.
+
+```{r}
+print("result of t test for difference of 2 groups")
+t.test(Life_Exp$`Life expectancy`[Life_Exp$Status == "Developing"],
+       Life_Exp$`Life expectancy`[Life_Exp$Status == "Developed"],
+       alternative = "less")
+```
+
+As the p value for the t test is smaller than 0.05, so we can reject the null under 0.05 significance level and conclude that the true difference between developing countries and developed countries is less than 0. Thus, we can see that the status of the country could affect life expectancy greatly. The people in the developed countries have larger life expectancy than the people in the developing countries. 
+
+## Country
+
+Then, we will explore the relationship between the life expectancy and countries. Different from only analyzing the development status, this part we will analyze the life expectancy among each different country in the dataset.
+
+
+We can calculate the mean life expectancy for all countries, and then plot that value on the global map. 
+
+```{r, fig.width=8, fig.height=6}
+# obtain the mean by country
+new_data <- Life_Exp
+summary_data <- new_data %>% 
+    group_by(Country) %>% 
+    summarize(mean=mean(`Life expectancy`))
+
+library(plotly)
+plot <- plot_geo(summary_data, locationmode="country names")%>%
+    add_trace(locations=~Country,
+             z=~mean,
+             color=~mean) %>%
+    plotly::layout(autosize = T,
+                   title = 'Mean Life Expectancy from 2000-2015 in map',
+                   geo = list(showframe = TRUE,
+                              showcoastlines = TRUE,
+                              projection = list(type = 'Mercator')))
+plot
+
+```
+
+From this global map, we can see that African countries especially mid-south African countries are almost the lowest life expectancy regions, and the Canada, Europe and Australia are the highest regions.
+
+
+Also, We will use bar plot to find the countries which has the highest and lowest life expectancy.
+
+```{r}
+options(repr.plot.width = 20, repr.plot.height = 20) 
+Life_Exp %>%
+  group_by(Country) %>%
+  summarise(mean = mean(`Life expectancy`)) %>%
+  ggplot(aes(x = mean, y = reorder(Country, mean))) +
+  geom_bar(stat = 'identity') +
+  labs(title = 'Mean Life Expectancy from 2000-2015', 
+       x = 'Life Expectancy',
+       y = 'Countries') 
+
+summary_data %>%
+  arrange(desc(mean))
+
+```
+
+From the bar plot above, we can see that Ireland has the highest Life Expectancy and Sierra Leone has the lowest Life Expectancy. This result of bar graph is consistent withe the calculation result. Also, Ireland is a European country, and Sierra Leone is a African country. Thus, this result is also consistent with the analysis of global map above.
+
+## Numerical variables
+
+This part we will explore the relationship between the life expectancy with left numerical variables.
+
+
+### Overview num variables independently
+
+First we can take a look at the overall situation of the variable independently.
+
+```{r}
+summary(Life_Exp)
+```
+
+
+### Selected num variables analysis
+
+Now let's make a scatter plot matrix of the response variable life expectancy with some selected continuous variable: Year, GDP, Population, Schooling, thinness  1-19 years.
+
+```{r, fig.height=6, fig.width=9}
+library(GGally)
+ggpairs(Life_Exp %>%
+          select(`Life expectancy`, Year, GDP, 
+                 Population, Schooling, `thinness  1-19 years`))
+```
+
+From the scatter plot matrix, we can observe there is a slightly positive relationship between year and life expectancy.The life expectancy increase when year increase. Lowest life expectancy increase much more when GDP increase, so the GDP has a high effect on the life expectation. The life expectancy is not so affected by population. Very suprisingly, the schooling has the most positive correlation with life expectancy as 0.752, and from the scatter plot matrix there is a very clear linear trend between them. For the thinness 1-19 years, it is not a suprise to observe it has a slightly negative correlation with life expectancy.
+
+
+### Overview all num variables with life expectancy
+
+Then, we will independently create the scatterplot for each predictor to clearly and directly determine the relationship between life expectancy and numeric variables. Also, the overview will help the final summary from EDA better.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=Year, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Year vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Year and Life Expectancy. As Year increase, the life expectancy will slightly increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`Adult Mortality`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Adult Mortality vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between Adult Mortality and Life Expectancy. As adult mortality increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`infant deaths`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Infant Deaths vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between Infant Deaths and Life Expectancy. As infant deaths increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Alcohol, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Alcohol vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between Alcohol and Life Expectancy. As Alcohol increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`percentage expenditure`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Percentage Expenditure vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between percentage expenditure and Life Expectancy. As percentage expenditure increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`Hepatitis B`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Hepatitis B vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Hepatitis B and Life Expectancy. As Hepatitis B increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Measles, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Measles vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between Measles and Life Expectancy. As Measles increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= BMI, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of BMI vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between BMI and Life Expectancy. As BMI increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `under-five deaths`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of under-five deaths vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between under-five deaths and Life Expectancy. As under-five deaths increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Polio, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Polio vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Polio and Life Expectancy. As Polio increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `Total expenditure`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Total expenditure vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Total expenditure and Life Expectancy. As Total expenditure increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Diphtheria, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Diphtheria vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Diphtheria and Life Expectancy. As Diphtheria increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`HIV/AIDS`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of HIV/AIDS vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between HIV/AIDS and Life Expectancy. As HIV/AIDS increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= GDP, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of GDP vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between GDP and Life Expectancy. As GDP increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Population, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Population vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is almost no relationship between Population and Life Expectancy. 
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`thinness  1-19 years`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of thinness  1-19 years vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between thinness  1-19 years and Life Expectancy. As thinness  1-19 years increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`thinness 5-9 years`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of thinness 5-9 years vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between thinness 5-9 years and Life Expectancy. As thinness 5-9 years increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `Income composition of resources`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Income composition of resources vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between Income composition of resources and Life Expectancy. As Income composition of resources increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Schooling, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Schooling vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between Schooling and Life Expectancy. As Schooling increase, the life expectancy will increase.
+
+
+### Correlation of all num variables
+
+First, we obtain the correlation matrix of all the continuous variables except time to take a rough look at positive or negative correlation.
+
+```{r}
+library(corrr)
+cor_life_exp <- Life_Exp %>%
+  select(-Country, -Year, -Status) %>%
+  correlate()
+rplot(cor_life_exp)
+```
+
+Next, we create a visualization of the matrix to further analyze the correlation among the variables. (With the specific correlation number, we can determine their correlation specifically.)
+
+```{r, fig.height=6, fig.width=9}
+
+ggcorr(
+  Life_Exp %>% select(-Country, -Year, -Status),
+  cor_matrix = cor(Life_Exp %>% select(-Country, -Year, -Status), use = "pairwise"),
+    label = T, 
+    hjust = 0.95,
+    angle = 0,
+    size = 4,
+    layout.exp = 3
+)
+```
+There are several things to state:
+
+1. For the response variable life expectancy, the most negative correlated predictors are adult mortality, Hiv-aids and thinness. The most positive correlated predictors are schooling, income composition of resources, BMI and GDP. 
+
+2. The infant death has 1 correlation with under five deaths, so we should only include the under 5 death. Also, for the 2 thinness variables, we should only include 1 as their correlation is 0.9. Same with the percentage expenditure and GDP. We should not include all of these predictors, because otherwise colinearlity will be introduced. 
+
+
+Then when we exclude these variables, we  can obtain the remaining variables correlation network plot.
+
+```{r, fig.height=5, fig.width=7}
+corrr::correlate(Life_Exp %>%
+   select(-Country, -Year, -Status, -`infant deaths`,
+   - `thinness 5-9 years`, -`Total expenditure`)) %>% corrr::network_plot()
+```
+
+From this network we can observe that the 3 vaccinate variable: Polio, Diphtheria and Hepatitis B are close in correlation. GDP, percentage expenditure, schooling, Alcohol, BMI are close in correlation. Measles, under 5 deaths and thiness are close in correlation.
+
+
+## Summary from EDA
+
+* The variables that life expectancy is most positively related are: schooling, and income composition of resources, BMI. The BMI seems a little bit wierd, because we know higher BMI will indicate obesity. This may correlated with other economy indicators.
+
+* The variables most negatively associated with life expectancy are: adult mortality and HIV/AIDS, thinness. These are not a surprise.
+
+* Life expectancy does not have much correlation with population.
+
+* Counties in Europe, Oceania, and North America has higher life expectancy, and countries in Africa has lower life expectancy.
+
+* Developed countries has higher life expectancy than undeveloped countries.
+
+* Life Expectancy range from 44 to 89, and most concentrated on from 70 to 75. 
+
+
+# Data Preparing and Spliting
+
+```{r}
+library(ISLR)
+library(yardstick)
+library(readr)
+library(discrim)
+library(poissonreg)
+library(corrr)
+library(klaR)
+tidymodels_prefer()
+library(janitor)
+library(glmnet)
+library(parsnip)
+library(rpart.plot)
+library(randomForest)
+library(xgboost)
+library(ranger)
+library(vip)
+library(rpart)
+library(gridExtra)
+library(scales)
+library(hablar)
+library(hrbrthemes)
+library(kknn)
+library(readr)
+```
+
+* Check missing values
+```{r}
+sum(is.na(Life_Exp))
+```
+We have excluded the missing value during the previous data cleaning process, so the missing value now is zero.
+
+* clean names
+```{r}
+Life_Exp_model <- Life_Exp %>%
+  clean_names()
+
+head(Life_Exp_model)
+```
+Compared with the tables before, we can find the cleam_names() function make the variables name changed with lower-case letter. Besides, the space which separate the words becomes the underscore “_“. Since this function standardizes all the variable names into the same clear format, it will be more convenient and easier for the latter understanding and data processing.
+
+* turn into factor variables
+```{r}
+Life_Exp_model <- Life_Exp_model%>%
+  mutate(year = factor(year)) %>%
+  mutate(status = factor(status, levels = c("Developing", "Developed")))
+head(Life_Exp_model)
+```
+*Split the data
+
+Here we split the data with 80% train and 20% test and stratify on the life_expectancy.
+
+```{r}
+# set a seed
+set.seed(123)
+
+# split the data into a training set and a testing set.
+# stratifying on the outcome variable, life_expectancy
+Life_split <- initial_split(Life_Exp_model, prop = 0.80, strata = life_expectancy)
+Life_train <- training(Life_split)
+Life_test <- testing(Life_split)
+```
+
+
+Verify that the training and testing data sets have the appropriate number of observations.
+
+```{r}
+dim(Life_Exp_model)
+dim(Life_train)
+dim(Life_test)
+# the number of observations for all data
+a <- nrow(Life_Exp_model)
+# the number of observations for training data
+b <- nrow(Life_train)
+# the number of observations for test data
+c <- nrow(Life_test)
+# the percentage of observations for training data
+per_train <- b/a
+print(paste('the percentage of observations for training data is', per_train))
+# the percentage of observations for test data
+per_test <- c/a
+print(paste('the percentage of observations for test data is', per_test))
+```
+
+There are 1318 observations in the training set, and there are 331 observations in the test set.
+
+The probability of training data observations is 0.7992722, which is almost equal to prob=0.80, so the training and testing data sets have the appropriate number of observations.
+
+* Exclude the variable "country"
+
+Since our model fitting mainly focused on the life expectancy, status, and other numerical variables, we decide to exclude the variable country in the training and test set before the model fitting.
+```{r}
+Life_train %>%
+  select(-country)
+Life_test %>%
+  select(-country)
+```
+
+# Model Fitting
+
+## Model Building
+
+### Create the fold
+
+We fold the training data with v-fold cross-validation, with v=5.
+```{r}
+Life_folds <- vfold_cv(Life_train, strata = life_expectancy, v = 5)
+Life_folds
+```
+
+### Create the recipe
+Using the training data, we create a recipe predicting the outcome variable, life-expectancy, with all other predictor variables. 
+
+Steps for my recipe:
+* dummy code all nominal predictors
+* create interactions between infant_deaths and under_five_deaths, thinness_1_19_years and thinness_5_9_years, between gdp and percentage_expenditure
+* center all predictors
+* scale all predictors.
+
+```{r}
+Life_recipe <- recipe(life_expectancy ~ year + status + adult_mortality + infant_deaths +
+                        alcohol + percentage_expenditure + hepatitis_b + measles +
+                        bmi + under_five_deaths + polio + total_expenditure + diphtheria +
+                        hiv_aids + gdp + population + thinness_1_19_years +
+                        thinness_5_9_years + income_composition_of_resources + schooling,
+                      data = Life_train) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  # create interactions between infant_deaths and under_five_deaths
+  step_interact(terms = ~infant_deaths:under_five_deaths) %>%
+  # create interactions between thinness_1_19_years and thinness_5_9_years
+  step_interact(terms = ~thinness_1_19_years:thinness_5_9_years) %>%
+  # create interactions between gdp and percentage_expenditure 
+  step_interact(terms = ~gdp:percentage_expenditure) %>%
+  # center all predictors
+  step_center(all_nominal_predictors()) %>%
+  # scale all predictors
+  step_scale(all_nominal_predictors())
+Life_recipe
+```
+
+
+## Ridge regression
+```{r}
+ridge_model <- linear_reg(penalty = tune(), mixture = 0) %>%
+  set_mode("regression") %>%
+  set_engine("glmnet")
+
+ridge_workflow <- workflow() %>%
+  add_recipe(Life_recipe) %>%
+  add_model(ridge_model)
+
+penalty_grid <- grid_regular(penalty(range = c(-3, 6)), levels = 20)
+
+ridge_tune_res <- tune_grid(ridge_workflow,
+                         resamples = Life_folds,
+                         grid = penalty_grid
+                         )
+ridge_tune_res
+autoplot(ridge_tune_res)
+```
+
+```{r}
+Ridge_RMSE <- collect_metrics(ridge_tune_res) %>%
+  dplyr::select(.metric, mean, std_err)
+
+Ridge_RMSE
+```
+
+```{r}
+best_penalty <- select_best(ridge_tune_res, metric = "rsq")
+best_penalty
+ridge_final <- finalize_workflow(ridge_workflow, best_penalty)
+ridge_final_fit <- fit(ridge_final, data = ec_train)
+Ridge_Prediction <- predict(ridge_final_fit, new_data = ec_test %>% dplyr::select(-price_euro))
+Ridge_Prediction <- bind_cols(Ridge_Prediction, ec_test %>% dplyr::select(price_euro))
+Ridge_Graph <- Ridge_Prediction %>%
+  ggplot(aes(x=.pred, y=price_euro)) + geom_point(alpha = 1) + geom_abline(lty = 2) + theme_bw() + coord_obs_pred()
+Ridge_Accuracy <- augment(ridge_final_fit, new_data = ec_test) %>%
+  rsq(truth = price_euro, estimate = .pred)
+```
+
+
+## Lasso Regresion
+```{r}
+lasso_spec <- linear_reg(penalty = tune(), mixture = 1) %>%
+  set_mode("regression") %>%
+  set_engine("glmnet")
+
+lasso_workflow <- workflow() %>%
+  add_recipe(Life_recipe) %>%
+  add_model(lasso_spec)
+
+lasso_tune_res <- tune_grid(
+  lasso_workflow,
+  resamples = Life_folds,
+  grid = penalty_grid
+)
+lasso_tune_res
+autoplot(lasso_tune_res)
+```
+
+## Random Forest
+```{r}
+rf_model <- rand_forest(min_n = tune(), mtry = tune(), trees = tune()) %>% 
+  set_mode("regression") %>%
+  set_engine("ranger")
+
+rf_workflow <- workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(Life_recipe)
+
+rf_grid <- grid_regular(mtry(range = c(2,10)), 
+                        trees(range = c(10,200)), 
+                        min_n(range = c(1,10)),
+                        levels = 10)
+
+tune_rf <- tune_grid(
+  rf_workflow,
+  resamples = Life_folds,
+  grid = rf_grid)
+
+turn_rf
+autoplot(turn_rf)
+
+```
+
+## Boosted Trees
+```{r}
+bt_model <- boost_tree(min_n = tune(),
+                       mtry = tune(),
+                       learn_rate = tune()) %>% 
+  set_mode("regression") %>%
+  set_engine("xgboost")
+
+bt_workflow <- workflow() %>% 
+  add_model(bt_model) %>% 
+  add_recipe(Life_recipe)
+
+bt_grid <- grid_regular(trees(range = c(10,200)), tree_depth(range = c(1,10)), levels = 10)
+```
+
+
+
+
+
+
+
+
+# Data splitting
+
+Now we are going to build models to fit the data. We first apply cross validation on the dataset. Because the data includes life expectancy from different countries, so the best train-test split should not applied on the whole dataset directly, but should applied on the countries.
+
+Here we split the data with 80% train and 20% test.
+
+```{r}
+set.seed(123)
+countries = unique(Life_Exp$Country)
+library(caret)
+
+train <- sample(length(countries), floor(0.8 * length(countries)))
+countries_train <- countries[train]
+countries_test <- countries[-train]
+
+Life_train = Life_Exp %>% dplyr::filter(
+  Country %in%  countries_train
+)
+
+Life_test = Life_Exp %>% dplyr::filter(
+  Country %in%  countries_test
+)
+```
+
+Verify that the training and testing data sets have the appropriate number of observations.
+
+```{r}
+dim(Life_Exp)
+dim(Life_train)
+dim(Life_test)
+# the number of observations for all data
+a <- nrow(Life_Exp)
+# the number of observations for training data
+b <- nrow(Life_train)
+# the number of observations for test data
+c <- nrow(Life_test)
+# the percentage of observations for training data
+per_train <- b/a
+print(paste('the percentage of observations for training data is', per_train))
+# the percentage of observations for test data
+per_test <- c/a
+print(paste('the percentage of observations for test data is', per_test))
+```
+The probability of training data observations is 0.7962401, which is almost equal to prob=0.80, so the training and testing data sets have the appropriate number of observations.
+
+For cross validation, we will use the caret package to achieve cross validation in model training.
+
+# Model fitting
+
+## Linear regression with feature selection
+
+First we deselect the variable country and year, and also deselect these variable that may cause colinearity in the previous part.
+
+```{r}
+dataLin = Life_train %>% 
+    select(-Country) %>%
+    select(-Year,  -`infant deaths`, - `thinness 5-9 years`, -`Total expenditure`)
+```
+
+Now we use the backward variable selection technique in linear regression to build the best model based on the training dataset.
+
+```{r}
+library(leaps)
+
+backward_sel <- regsubsets(x=`Life expectancy` ~.,data= dataLin, nvmax=17, method="backward")
+
+back_summary <- summary(backward_sel)
+
+back_summary_df <- data.frame(
+   cp = back_summary$cp,
+   ADJ.R2 = back_summary$adjr2
+)
+back_summary_df
+```
+
+Then based on $C_p$ and adjusted R square, we should choose the model with 11 variables. 
+
+The backward selection exclude variable GDP, population, Polio, Hepatitis B, thiness.
+
+So the final regression model include the variables: `StatusDeveloping `, `Adult Mortality`, `Alcohol`, `percentage expenditure`, `Measles`, `BMI `.
+
+The model summary is here:
+
+```{r}
+dataLin1 = dataLin %>% select(-GDP,-`thinness  1-19 years`, -Population, -Polio, -`Hepatitis B`)
+model1 = lm(`Life expectancy` ~ .,data= dataLin1)
+summary(model1)
+```
+
+
+And the model RMSE for the train and test are:
+
+```{r}
+library(caret)
+dataLin2 = Life_test %>% 
+    select(-Country) %>%
+    select(-Year, 
+           -`infant deaths`,
+   - `thinness 5-9 years`, -`Total expenditure`, -GDP,-`thinness  1-19 years`, -Population, -Polio, -`Hepatitis B`)
+
+predictions_train <- predict(model1, dataLin1)
+
+predictions_test <- predict(model1, dataLin1)
+# computing model performance metrics
+result = data.frame(name = "linear regression",
+            RMSE_train = RMSE(predictions_train, dataLin1$`Life expectancy`),
+            RMSE_test = RMSE(predictions_test, dataLin2$`Life expectancy`))
+result
+```
+
+## Lasso regression
+
+Now use the LASSO to build the regression model. Here we use cross validation on the training set to determine the best lambda for LASSO regression.
+
+```{r, fig.width=5, fig.height=5}
+library(glmnet)
+set.seed(123)
+cv_lambda_LASSO <- cv.glmnet(
+  x = as.matrix(Life_train[,-c(1,2,3,4)]), y = as.matrix(Life_train[,4]),
+  alpha = 1,
+  lambda = exp(seq(-8, 3, 0.2)),
+  family = 'gaussian'
+)
+lambda_min_MSE_LASSO <- round(cv_lambda_LASSO$lambda.min, 5)
+plot(cv_lambda_LASSO, main = "Lambda selection by CV with LASSO\n\n")
+plot(cv_lambda_LASSO$glmnet.fit, "lambda")
+abline(v = log(lambda_min_MSE_LASSO), col = "red", lwd = 3, lty = 2)
+```
+
+So the best lambda should be 0.00034, thus the RMSE of the train and test dataset of LASSO regression model is:
+
+```{r}
+model2 = glmnet(
+  x = as.matrix(Life_train[,-c(1,2,3,4)]), y = as.matrix(Life_train[,4]),
+  alpha = 1,
+  lambda = lambda_min_MSE_LASSO,
+  family = 'gaussian'
+)
+
+predictions_train <- predict(model2, newx = as.matrix(Life_train[,-c(1,2,3,4)]),s = lambda_min_MSE_LASSO)
+
+predictions_test <- predict(model2, newx = as.matrix(Life_test[,-c(1,2,3,4)]),s = lambda_min_MSE_LASSO)
+# computing model performance metrics
+result[2,] = c("LASSO", 
+               RMSE(predictions_train, Life_train$`Life expectancy`),
+               RMSE(predictions_test, Life_test$`Life expectancy`))
+result
+```
+
+## Ridge regression
+
+Now use the Ridge regression to build the regression model. Here we use cross validation on the training set to determine the best lambda for Ridge regression.
+
+```{r, fig.width=5, fig.height=5}
+cv_lambda_ridge <- cv.glmnet(
+  x = as.matrix(Life_train[,-c(1,2,3,4)]), y = as.matrix(Life_train[,4]),
+  alpha = 0,
+  lambda = exp(seq(-11, 8, 0.2)),
+  family = 'gaussian'
+)
+lambda_min_MSE_ridge <- round(cv_lambda_ridge$lambda.min, 5)
+plot(cv_lambda_ridge, main = "Lambda selection by CV with Ridge\n\n")
+plot(cv_lambda_ridge$glmnet.fit, "lambda")
+abline(v = log(lambda_min_MSE_ridge), col = "red", lwd = 3, lty = 2)
+```
+
+So the best ridge lambda is 0.00203 based on cross validation, thus the RMSE of the train and test dataset of ridge regression model is:
+
+```{r}
+model3 = glmnet(
+  x = as.matrix(Life_train[,-c(1,2,3,4)]), y = as.matrix(Life_train[,4]),
+  alpha = 0,
+  lambda = lambda_min_MSE_ridge,
+  family = 'gaussian'
+)
+
+predictions_train <- predict(model3, newx = as.matrix(Life_train[,-c(1,2,3,4)]),s = lambda_min_MSE_ridge)
+
+predictions_test <- predict(model3, newx = as.matrix(Life_test[,-c(1,2,3,4)]),s = lambda_min_MSE_ridge)
+# computing model performance metrics
+result[3,] = c("Ridge", 
+               RMSE(predictions_train, Life_train$`Life expectancy`),
+               RMSE(predictions_test, Life_test$`Life expectancy`))
+result
+```
+
+## Random forest
+
+Now we use cross validation to determine the best mtry parameter for random forest here.
+
+```{r}
+
+rf.expand <- expand.grid(mtry = 8:13)
+set.seed(123)
+rf <- caret::train(as.data.frame(Life_train[,c(2,3,5:22)]), Life_train$`Life expectancy`, method = "rf",
+    metric = "RMSE", trControl = trainControl(method = "cv"), tuneGrid = rf.expand)
+rf
+```
+
+```{r, fig.width=6, fig.height=6}
+library(randomForest)
+varImpPlot(rf$finalModel, type = 2, main = "Random Forest")
+```
+
+
+
+And the RMSE of random forest model is:
+
+```{r}
+predictions_train <- predict(rf$finalModel, Life_train)
+
+predictions_test <- predict(rf$finalModel, Life_test)
+# computing model performance metrics
+result[4,] = c("Random forest", 
+               RMSE(predictions_train, Life_train$`Life expectancy`),
+               RMSE(predictions_test, Life_test$`Life expectancy`))
+result
+```
+
+Thus the best fitting model is the random forest, with the mtry = 12. The best model has the smallest RMSE on train 0.692 and test 2.689, better than the others.
+
+# Conclusion
+
+From out exploratory data analysis and model fitting part, we can know that the random forest method performs much better than the regression methods. Of all these methods, the linear regression perform the worst. Also from the importance variable plot from random forest model, we can observe that the variable Aids/Hiv, income from resources, adult motality and schooling have the highest importance to life expectancy. We also checked that developing countries have on average lower life expectancy than developed countries.
+
+The next steps can be the longitudinal data analysis. Because this data has a covariate time, and this data is a longitudinal data, so some complex model such as linear mixed model (random effects model).
