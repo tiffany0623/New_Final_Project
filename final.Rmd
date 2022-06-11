@@ -1,7 +1,7 @@
 ---
 title: "Final project"
-author: 
-date: 6/5/2022
+author: Yu Tian
+date: 6/10/2022
 output:
   html_document:
     code_folding: hide    
