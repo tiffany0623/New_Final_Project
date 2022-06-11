@@ -1,0 +1,488 @@
+---
+title: "Final project"
+author: 
+date: 6/5/2022
+output:
+  html_document:
+    code_folding: hide    
+    toc: true
+    toc_float: TRUE
+    theme: united
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      results = 'markup',
+                      fig.width = 4,
+                      fig.height = 3,
+                      fig.align = 'center',
+                      message = F,
+                      warning = F)
+# packages
+library(tidyverse)
+library(ggplot2)
+library(tidymodels)
+library(rsample)
+```
+
+# Introduction
+
+The purpose of this project is to study the relationship between life expectancy and other statistics of countries. Life expectancy is an estimate of how long a person would live on average for each country. As life expectancy is a very point indicate of people life quality, this study will help people understand how to improve people life quality. The data of this project comes from the Global Health Observatory (GHO) data repository under World Health Organization (WHO). Globally, life expectancy has increased by more than 6 years between 2000 and 2019 – from 66.8 years in 2000 to 73.4 years in 2019. And we hope to find what's the most important issue behind that increase for life expectancy.
+
+This project contains 2 parts:
+
+The first part is to explore the relationships between these variables for model insight.
+
+The second part is to build models to find the important predictors of life expectancy.
+
+
+# Data
+
+Here we load in the data, and present the first several rows of the data
+
+```{r}
+Life_Exp <- read_csv(file = "Life Expectancy Data.csv") %>% na.omit() 
+Life_Exp %>% head()
+```
+
+The dataset contains 1649 observations and 22 variables. These 1649 observations are from 133 countries, and recorded their life expectancy from 2000 to 2015. Some countries miss some year.
+
+The response variable of this dataset is Life expectany. This is a continuous variable ranged from 0 to 100.
+
+The predictor variables have two main types:
+
+1. Numeric variables:
+
+- * Years: ranged from 2000 to 2015
+
+- * Statistics about longetivity and mortality: Adult Mortality, infant deaths, under-five deaths, Population
+
+- * Statistics about economy: Total expenditure, GDP, Income composition of resources
+
+- * Statistics about illness: Hepatitis B, Measles, Polio, Diphtheria,  HIV/AIDS
+
+- * Statistics about people: Schooling,  thinness  1-19 years,  thinness 5-9 years,  BMI , Alcohol.
+
+2. Category variable:
+
+- * Country
+
+- * Status: Developing, Developed
+
+For the detailed description of these data, the `Adult.Mortality` column represents the adult mortality rates of both genders, which is the probability of dying between 15 and 60 years per 1000 population. `Infant.deaths` shows the number of infant deaths per 1000 population. The `Alcohol` column describes the total litres of consumption for pure alcohol recorded per capita for ages 15 and older. The `Hepatitis.B`, `Polio`, and `Diphteria` variables shows the percentage of immunization coverage among 1-year-olds for these diseases. The `Measles` column represents the number of reported cases of the measles per 1000 population. `thinness  1-19 years` represents the percentage of thinness present in children ranging from the age of 10 to 19 years old. `thinness 5-9 years` represents the percentage of thinness present in children ranging from the age of 10 to 19 years old.
+
+Thelife expectancy ranges from 44 to 89, so the people in the country with the highest life expectancy live almost twice as long as the ones in the country with the lowest life expectancy. 
+
+# Explorarotory data analysis
+
+## Development status
+
+For the first question, Do developed countries significantly have higher life expectancy than the undeveloped countries? Regarding life expectancy and developed/developing countries, we can use EDA method and statistic method to answer this question.
+
+First we can use a group boxplot to illustrate that the developed countries has higher life expectancy. Here is the Life Expectancy against Development Status group box plot.
+
+```{r}
+library(ggstatsplot)
+plt <- ggbetweenstats(
+  data = Life_Exp,
+  x = Status, 
+  y = "Life expectancy",
+  plot.type = "box",
+  type = "p",
+  conf.level = 0.99,
+  title = "Parametric test",
+  bf.message = FALSE,
+  results.subtitle = FALSE
+
+)
+plt <- plt + 
+  # Add labels and title
+  labs(
+    x = "Development Status",
+    y = "Life Expectancy",
+    title = "Life Expectancy against Development Status"
+  )
+plt
+```
+
+From the boxplot we can see there is  a stark difference in the life expectancy in developing and developed countries. The mean, median for developed countries life expectancy is much higher than the developing ones. The minimum life expectancy is also much lower in developing countries. We can also apply parametric t test to illustrate that difference is significant.
+
+```{r}
+print("result of t test for difference of 2 groups")
+t.test(Life_Exp$`Life expectancy`[Life_Exp$Status == "Developing"],
+       Life_Exp$`Life expectancy`[Life_Exp$Status == "Developed"],
+       alternative = "less")
+```
+
+As the p value for the t test is smaller than 0.05, so we can reject the null under 0.05 significance level and conclude that the true difference between developing countries and developed countries is less than 0. Thus, we can see that the status of the country could affect life expectancy greatly.
+
+## Country
+
+We can calculate the mean life expectancy for all countries, and then plot that value on the global map. From this global map we can see that African countries especially mid-south African countries are amongst the lowest life expectancy regions, and the Canada, Europe and Australia are the highest.
+
+```{r, fig.width=8, fig.height=6}
+# obtain the mean by country
+new_data <- Life_Exp
+summary_data <- new_data %>% 
+    group_by(Country) %>% 
+    summarize(mean=mean(`Life expectancy`))
+
+library(plotly)
+plot <- plot_geo(summary_data, locationmode="country names")%>%
+    add_trace(locations=~Country,
+             z=~mean,
+             color=~mean) %>%
+    layout(autosize = T,
+  title = 'Mean Life Expectancy from 2000-2015 in map',
+  geo = list(
+showframe = TRUE,
+showcoastlines = TRUE,
+projection = list(type = 'Mercator')
+))
+plot
+
+```
+
+## Numerical variables
+
+Now first let's make a scatter plot matrix of the response variable life expectancy with some selected continuous variable: Year, GDP, Population, Schooling, thinness  1-19 years.
+
+```{r, fig.height=6, fig.width=9}
+library(GGally)
+ggpairs(Life_Exp %>%
+    select(`Life expectancy`, Year, GDP, Population,Schooling, `thinness  1-19 years`))
+```
+
+From the scatter plot matrix, we can observe the life expectancy increase when year increase, lowest life expectancy increase much more when GDP increase, not so affected by popylation. Very suprisingly, the schooling has the most positive correlation with life expectancy as 0.752, and from the scatter plot matrix there is a very clear linear trend between them. For the thinness 1-19 years, it is not a suprise to observe it has a negative correlation with life expectancy.
+
+Here we obtain the correlation of all the continuous variables except time. There are several things to state:
+
+```{r, fig.height=6, fig.width=9}
+
+ggcorr(
+  Life_Exp %>% select(-Country, -Year, -Status),
+  cor_matrix = cor(Life_Exp %>% select(-Country, -Year, -Status), use = "pairwise"),
+    label = T, 
+    hjust = 0.95,
+    angle = 0,
+    size = 4,
+    layout.exp = 3
+)
+```
+
+1. For the response variable life expectancy, the most negative correlated predictors are adult mortality, Hiv-aids and thinness. The most positive correlated predictors are schooling, income composition of resources, BMI and GDP. 
+
+2. The infant death has 1 correlation with under five deaths, so we should only include the under 5 death. Also, for the 2 thinness variables, we should only include 1 as their correlation is 0.9. Same with the percentage expenditure and GDP. We should not include all of these predictors, because otherwise colinearlity will be introduced. 
+
+Then when we exclude these variables, we  can obtain the remaining variables correlation network plot.
+
+```{r, fig.height=5, fig.width=7}
+Life_Exp %>%
+   select(-Country, -Year, -Status, -`infant deaths`,
+   - `thinness 5-9 years`, -`Total expenditure`) %>% 
+ corrr::correlate() %>% corrr::network_plot()
+```
+
+From this network we can observe that the 3 vaccinate variable: Polio, Diphtheria and Hepatitis B are close in correlation, GDP, percentage expenditure, schooling, Alcohol, BMI are close in correlation, Measles, under 5 deaths and thiness are close in correlation.
+
+## Summary from EDA
+
+* The variables that life expectancy is most positively related are: schooling, and income composition of resources, BMI. The BMI seems a little bit wierd, because we know higher BMI will indicate obesity. This may correlated with other economy indicators.
+
+* The variables most negatively associated with life expectancy are: adult mortality and HIV/AIDS, thinness. These are not a surprise.
+
+* Life expectancy does not have much correlation with population.
+
+* Developed countries has higher life expectancy than undeveloped countries.
+
+
+# Preparation for modeling
+
+## Preparing the data
+
+```{r}
+Life_Exp  <- Life_Exp  %>%
+  mutate(Country = factor(Country)) %>%
+  mutate(Status = factor(Status)) 
+head(Life_Exp)
+```
+
+## Splitting the data
+
+```{r}
+set.seed(123)
+ec_split <- Life_Exp %>%
+  initial_split(prop = 0.8, strata = "Status")
+ec_train <- training(ec_split)
+dim(ec_train) 
+ec_test <- testing(ec_split)
+dim(ec_test) 
+```
+
+Here split the data with a 0.8 proportion, strata by Status. Training set include 1318 observations and testing include 331 observations
+
+## Making the recipe and folds
+
+```{r}
+ec_recipe <- recipe(`Life expectancy` ~ `Status` + `Adult Mortality` + `infant deaths` +
+                      Alcohol + `percentage expenditure` + `Hepatitis B` + Measles + BMI +
+                      `under-five deaths` + Polio + `Total expenditure`+
+                      Diphtheria+ `HIV/AIDS` + GDP + Population + `thinness  1-19 years` + 
+                      `thinness 5-9 years` + `Income composition of resources` + Schooling,
+                    data = ec_train) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_normalize(all_predictors()) %>%
+  step_novel(all_nominal_predictors()) %>%
+  step_zv(all_nominal_predictors())
+               
+ec_folds <- vfold_cv(ec_train, strata = Status, v = 10, repeats = 5)
+```
+
+
+
+### Ridge Regression
+
+Here we use the Ridge Regression Model to fit the life expectancy. Ridge regression is one of the main types of the Regularization approach to select features in regression. Ridge regression minimizes the sum of squared residuals and $\lambda * ||\beta||^2$.
+
+```{r message=FALSE, warning=FALSE}
+ridge_spec <- linear_reg(penalty = tune(), mixture = 0) %>%
+  set_mode("regression") %>%
+  set_engine("glmnet")
+ridge_workflow <- workflow() %>%
+  add_recipe(ec_recipe) %>%
+  add_model(ridge_spec)
+set.seed(123)
+penalty_grid <- grid_regular(penalty(range = c(-4, 4), trans = log10_trans()), levels = 20)
+tune_res <- tune_grid(
+  ridge_workflow,
+  resamples = ec_folds,
+  grid = penalty_grid
+)
+autoplot(tune_res)
+```
+Now calculate the metrics of our regression tune and look at the mean and standard error. 
+
+```{r}
+Ridge_RMSE <- collect_metrics(tune_res) %>%
+  dplyr::select(.metric, mean, std_err)
+Ridge_RMSE = Ridge_RMSE[c(1,2),]
+```
+
+Now select the best ridge model based on R square metric and fit the model, and get the final prediction result.
+
+```{r}
+best_penalty <- select_best(tune_res, metric = "rsq")
+best_penalty
+ridge_final <- finalize_workflow(ridge_workflow, best_penalty)
+ridge_final_fit <- fit(ridge_final, data = ec_train)
+Ridge_Prediction <- predict(ridge_final_fit, new_data = ec_test %>% dplyr::select(-`Life expectancy`))
+Ridge_Prediction <- bind_cols(Ridge_Prediction, ec_test %>% dplyr::select(`Life expectancy`))
+Ridge_Graph <- Ridge_Prediction %>%
+  ggplot(aes(x=.pred, y=`Life expectancy`)) + geom_point(alpha = 1) + geom_abline(lty = 2) + theme_bw() + coord_obs_pred()
+Ridge_Accuracy <- augment(ridge_final_fit, new_data = ec_test) %>%
+  rsq(truth = `Life expectancy`, estimate = .pred)
+```
+
+
+## Lasso Regression
+
+The second model is a Lasso Regression Model. Lasso minimizes the sum of squared residuals and $\lambda * ||\beta||$.
+
+```{r message=FALSE, warning=FALSE}
+lasso_spec <-
+  linear_reg(penalty = tune(), mixture = 1) %>%
+  set_mode("regression") %>%
+  set_engine("glmnet")
+lasso_workflow <- workflow() %>%
+  add_recipe(ec_recipe) %>%
+  add_model(lasso_spec)
+set.seed(1234)
+tune_res_lasso <- tune_grid(
+  lasso_workflow,
+  resamples = ec_folds,
+  grid = penalty_grid
+)
+autoplot(tune_res_lasso)
+Lasso_RMSE <- collect_metrics(tune_res_lasso) %>%
+  dplyr::select(.metric, mean, std_err) %>%
+  head(2)
+```
+
+We collect the metrics of our Lasso regression tune and look at the mean and standard error. Now select the best ridge model based on R square metric and fit the model, and get the final prediction result.
+
+```{r}
+best_penalty_lasso <- select_best(tune_res_lasso, metric = "rsq")
+lasso_final <- finalize_workflow(lasso_workflow, best_penalty_lasso)
+lasso_final_fit <- fit(lasso_final, data = ec_train)
+Lasso_Prediction <- predict(lasso_final_fit, new_data = ec_test %>% dplyr::select(-`Life expectancy`))
+Lasso_Prediction <- bind_cols(Lasso_Prediction, ec_test %>% dplyr::select(`Life expectancy`))
+Lasso_Graph <- Lasso_Prediction %>%
+  ggplot(aes(x=.pred, y=`Life expectancy`)) + geom_point(alpha=1) + geom_abline(lty = 2) + theme_bw() + coord_obs_pred()
+Lasso_Accuracy <- augment(lasso_final_fit, new_data = ec_test) %>%
+  rsq(truth = `Life expectancy`, estimate = .pred)
+
+```
+
+
+## Boosted Model
+
+The third model is a boosted tree model. A boosted model builds a weak decision tree that has low predictive accuracy. Then the method sequentially improving previous decision trees. 
+
+```{r, message=FALSE, warning=FALSE}
+boost_spec <- boost_tree() %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+boost_wf <- workflow() %>%
+  add_model(boost_spec %>%
+  set_args(trees = tune())) %>%
+  add_recipe(ec_recipe)
+set.seed(123)
+boost_grid <- grid_regular(trees(range = c(10, 2000)), levels = 50)
+boost_tune_res <- tune_grid(
+  boost_wf,
+  resamples = ec_folds,
+  grid = boost_grid,
+)
+autoplot(boost_tune_res)
+
+Boost_RMSE <- collect_metrics(boost_tune_res) %>% 
+  dplyr::select(.metric, mean, std_err) %>%
+  head()
+```
+
+We collect the metrics of our regression tune and look at the mean and standard error. Now select the best ridge model based on R square metric and fit the model, and get the final prediction result.
+
+```{r}
+best_boost_final <- select_best(boost_tune_res,metric = "rsq")
+best_boost_final_model <- finalize_workflow(boost_wf, best_boost_final)
+best_boost_final_model_fit <- fit(best_boost_final_model, data = ec_train)
+Boost_Prediction <- predict(best_boost_final_model_fit, new_data = ec_test %>% dplyr::select(-`Life expectancy`))
+Boost_Prediction <- bind_cols(Boost_Prediction, ec_test %>% dplyr::select(`Life expectancy`))
+Boost_Graph <- Boost_Prediction %>%
+  ggplot(aes(x=.pred, y=`Life expectancy`)) + geom_point(alpha=1) + geom_abline(lty = 2) + theme_bw() + coord_obs_pred()
+Boost_Accuracy <- augment(best_boost_final_model_fit, new_data = ec_test) %>%
+  rsq(truth = `Life expectancy`, estimate = .pred)
+```
+
+## Decision - Tree model
+
+The fourth model is a decision tree model. 
+
+```{r, message=FALSE, warning=FALSE}
+tree_spec <-decision_tree() %>%
+  set_engine("rpart")
+class_tree_spec <- tree_spec %>%
+  set_mode("regression")
+  
+class_tree_wf <- workflow() %>%
+  add_model(class_tree_spec %>% set_args(cost_complexity = tune())) %>%
+  add_recipe(ec_recipe)
+set.seed(123)
+param_grid <- grid_regular(cost_complexity(range = c(-3, 3)), levels = 10)
+tune_res_tree <- tune_grid(
+  class_tree_wf,
+  resamples = ec_folds,
+  grid = param_grid,
+)
+autoplot(tune_res_tree)
+```
+
+
+```{r}
+Tree_RMSE <- collect_metrics(tune_res_tree) %>%
+  dplyr::select(.metric, mean, std_err) %>%
+  head(2)
+```
+
+We collect the metrics of our regression tune and look at the mean and standard error. Now select the best ridge model based on R square metric and fit the model, and get the final prediction result.
+
+```{r}
+library(rpart.plot)
+best_complexity <- select_best(tune_res_tree, "rsq")
+class_tree_final <- finalize_workflow(class_tree_wf, best_complexity)
+class_tree_final_fit <- fit(class_tree_final, data = ec_train)
+class_tree_final_fit %>%
+  extract_fit_engine() %>%
+  rpart.plot()
+```
+
+From the plot of the decision tree, the most important variables are: income composition of resources, HIV/AIDs. Now we predict the life expectancy on the test set.
+
+```{r}
+Tree_Prediction <- predict(class_tree_final_fit, new_data = ec_test %>% dplyr::select(-`Life expectancy`))
+Tree_Prediction <- bind_cols(Tree_Prediction, ec_test %>% dplyr::select(`Life expectancy`))
+Tree_Graph <- Tree_Prediction %>%
+  ggplot(aes(x=.pred, y=`Life expectancy`)) + geom_point(alpha=1) + geom_abline(lty = 2) + theme_bw() + coord_obs_pred()
+Tree_Accuracy <- augment(class_tree_final_fit, new_data = ec_test) %>%
+  rsq(truth = `Life expectancy`, estimate = .pred)
+```
+
+
+# Model comparison
+
+Now we compare the four different models: ridge, lasso, boost and decision tree. 
+We will compare the four different models by these factors:
+- Prediction Graphs
+- RMSE & RSQ (R-Squared) from Training Set
+- RSQ from Testing Set
+
+## Prediction Graphs
+
+```{r, fig.height=6, fig.width=6}
+library(ggpubr)
+figure <- ggarrange(Ridge_Graph, Lasso_Graph, Boost_Graph,Tree_Graph,
+                    labels = c("Ridge", "Lasso", "Boost","Tree"),
+                    ncol = 2, nrow = 2)
+figure
+```
+
+In the plots the dotted line represents where the points would be if the model prediction is the same as true life expectancy. Looking at the plots it seems that the Boost model has the points closest to the dotted line, which means it has the best performance in the four models.
+
+## RMSE & RSQ in Training Set
+
+Ridge regression model: 
+```{r}
+head(Ridge_RMSE)
+```
+
+Lasso regression model: 
+
+```{r}
+head(Lasso_RMSE)
+```
+
+Boost model:
+
+```{r}
+head(Boost_RMSE, 2)
+```
+
+Decision Tree:
+
+```{r}
+head(Tree_RMSE,2 )
+```
+
+So the Boost model has the highest RSQ on the training set, decision tree has the smallest rmse on the training set. Based on the RSQ, boost model is the best.
+
+## R-Squared of Testing Set
+```{r}
+rsq_comparisons <- bind_rows(Ridge_Accuracy, Lasso_Accuracy, Boost_Accuracy, Tree_Accuracy) %>% 
+  tibble() %>% mutate(model = c("Ridge", "Lasso", "Boost", "Tree")) %>% 
+  dplyr::select(model, .estimate) %>%
+  arrange(.estimate)
+rsq_comparisons
+```
+
+Looking at the R-Squared of the test set. Of the 4 models, the Boost model has the highest R squared 0.948, much higher than the others.
+
+# Conclusion
+
+From our exploratory data analysis and model fitting part, we can know that the Boost model performs much better than the other methods. We also checked that developing countries have on average lower life expectancy than developed countries.
+
+The next steps can be the longitudinal data analysis. Because this data has a covariate time, and this data is a longitudinal data, so some complex model such as linear mixed model (random effects model).
