@@ -78,13 +78,54 @@ For the detailed description of these data, the `Adult.Mortality` column represe
 
 Thelife expectancy ranges from 44 to 89, so the people in the country with the highest life expectancy live almost twice as long as the ones in the country with the lowest life expectancy. 
 
+
+
+## Simple Analysis of Response Variable
+```{r}
+Life_Exp %>%
+  summarise(average=mean(`Life expectancy`), 
+            maximum=max(`Life expectancy`),
+            minimum=min(`Life expectancy`))
+```
+
+The life expectancy ranges from 44 to 89, so the people in the country with the highest life expectancy live almost twice as long as the ones in the country with the lowest life expectancy. Also, the average life expectancy is 69.3023, which is close to 70. This value is much higher than the past decades. Thus, it's significant to explore these situations and predict the future possibility. 
+
 # Explorarotory data analysis
+
+## Life Expectancy
+
+First, we can use histogram to roughly analyze the response variable "Life Expectancy" in the dataset, and later we will predict the life expectancy in our model.
+
+```{r}
+ggplot(Life_Exp, aes(`Life expectancy`)) +
+  geom_histogram(bins = 50, color = "white") +
+  labs(title = "Histogram of Life Expectancy") +
+  theme_bw()
+```
+
+From the histogram above, we can see that the distribution of life expectancy is a little light skewed. The range of life expectancy is from 44 to 89, and most life expectancy are concentrated from 60 to 80. Especially from 70 to 75, there is the highest count. Besides, the life expectancy, which are more than 85 and less than 50, have less count. Next, we will continue to explore the relationship between the life expectancy and other factors, which may affect the life expectancy.
+
 
 ## Development status
 
-For the first question, Do developed countries significantly have higher life expectancy than the undeveloped countries? Regarding life expectancy and developed/developing countries, we can use EDA method and statistic method to answer this question.
+For the next question, Do developed countries significantly have higher life expectancy than the undeveloped countries? Regarding life expectancy and developed/developing countries, we can use EDA method and statistic method to answer this question and explore the relationship between the life expectancy and development status.
 
-First we can use a group boxplot to illustrate that the developed countries has higher life expectancy. Here is the Life Expectancy against Development Status group box plot.
+
+First, we can use the histogram to directly display the the number of developed/developing countries.
+
+```{r}
+status_counting <- Life_Exp %>%
+    group_by(Status) %>%
+    summarise(Count = n())
+ggplot(data = status_counting, aes(x = Status, y = Count)) +
+  geom_histogram(bins = 50, stat = "identity", fill = c("red", "blue")) +
+  labs(title="Histogram of Development Status") +
+  theme_bw()
+```
+From the histogram we can see that the statistics of developing countries (more than 1250)is much more than developed countries (less than 250). The big difference is formed because there are more developing countries in the world.
+
+
+Then we can use a group boxplot to further illustrate that the developed countries has higher life expectancy. Here is the Life Expectancy against Development Status group box plot.
 
 ```{r}
 library(ggstatsplot)
@@ -98,7 +139,6 @@ plt <- ggbetweenstats(
   title = "Parametric test",
   bf.message = FALSE,
   results.subtitle = FALSE
-
 )
 plt <- plt + 
   # Add labels and title
@@ -110,7 +150,9 @@ plt <- plt +
 plt
 ```
 
-From the boxplot we can see there is  a stark difference in the life expectancy in developing and developed countries. The mean, median for developed countries life expectancy is much higher than the developing ones. The minimum life expectancy is also much lower in developing countries. We can also apply parametric t test to illustrate that difference is significant.
+From the boxplot, we can see there is  a stark difference in the life expectancy in developing and developed countries. The mean of developed countries is 78.69, and the mean of developing countries is 67.69. The median of developed countries is around 78, and the median of developing countries is around 70. Thus, Both the mean and median for developed countries life expectancy is much higher than the developing ones. Besides, the range of life expectancy for developed countries is around between 70 and 90. The range of life expectancy for developing countries is around between 45 and 90. Thus, The minimum life expectancy is also much lower in developing countries. 
+
+We can also apply parametric t test to illustrate that difference is significant.
 
 ```{r}
 print("result of t test for difference of 2 groups")
@@ -119,11 +161,14 @@ t.test(Life_Exp$`Life expectancy`[Life_Exp$Status == "Developing"],
        alternative = "less")
 ```
 
-As the p value for the t test is smaller than 0.05, so we can reject the null under 0.05 significance level and conclude that the true difference between developing countries and developed countries is less than 0. Thus, we can see that the status of the country could affect life expectancy greatly.
+As the p value for the t test is smaller than 0.05, so we can reject the null under 0.05 significance level and conclude that the true difference between developing countries and developed countries is less than 0. Thus, we can see that the status of the country could affect life expectancy greatly. The people in the developed countries have larger life expectancy than the people in the developing countries. 
 
 ## Country
 
-We can calculate the mean life expectancy for all countries, and then plot that value on the global map. From this global map we can see that African countries especially mid-south African countries are amongst the lowest life expectancy regions, and the Canada, Europe and Australia are the highest.
+Then, we will explore the relationship between the life expectancy and countries. Different from only analyzing the development status, this part we will analyze the life expectancy among each different country in the dataset.
+
+
+We can calculate the mean life expectancy for all countries, and then plot that value on the global map. 
 
 ```{r, fig.width=8, fig.height=6}
 # obtain the mean by country
@@ -131,39 +176,285 @@ new_data <- Life_Exp
 summary_data <- new_data %>% 
     group_by(Country) %>% 
     summarize(mean=mean(`Life expectancy`))
-
 library(plotly)
 plot <- plot_geo(summary_data, locationmode="country names")%>%
     add_trace(locations=~Country,
              z=~mean,
              color=~mean) %>%
-    layout(autosize = T,
-  title = 'Mean Life Expectancy from 2000-2015 in map',
-  geo = list(
-showframe = TRUE,
-showcoastlines = TRUE,
-projection = list(type = 'Mercator')
-))
+    plotly::layout(autosize = T,
+                   title = 'Mean Life Expectancy from 2000-2015 in map',
+                   geo = list(showframe = TRUE,
+                              showcoastlines = TRUE,
+                              projection = list(type = 'Mercator')))
 plot
-
 ```
 
-## Numerical variables
+From this global map, we can see that African countries especially mid-south African countries are almost the lowest life expectancy regions, and the Canada, Europe and Australia are the highest regions.
 
-Now first let's make a scatter plot matrix of the response variable life expectancy with some selected continuous variable: Year, GDP, Population, Schooling, thinness  1-19 years.
+
+Also, We will use bar plot to find the countries which has the highest and lowest life expectancy.
+
+```{r}
+options(repr.plot.width = 20, repr.plot.height = 20) 
+Life_Exp %>%
+  group_by(Country) %>%
+  summarise(mean = mean(`Life expectancy`)) %>%
+  ggplot(aes(x = mean, y = reorder(Country, mean))) +
+  geom_bar(stat = 'identity') +
+  labs(title = 'Mean Life Expectancy from 2000-2015', 
+       x = 'Life Expectancy',
+       y = 'Countries') 
+summary_data %>%
+  arrange(desc(mean))
+```
+
+From the bar plot above, we can see that Ireland has the highest Life Expectancy and Sierra Leone has the lowest Life Expectancy. This result of bar graph is consistent withe the calculation result. Also, Ireland is a European country, and Sierra Leone is a African country. Thus, this result is also consistent with the analysis of global map above.
+
+
+
+### Selected num variables analysis
+
+Now let's make a scatter plot matrix of the response variable life expectancy with some selected continuous variable: Year, GDP, Population, Schooling, thinness  1-19 years.
 
 ```{r, fig.height=6, fig.width=9}
 library(GGally)
 ggpairs(Life_Exp %>%
-    select(`Life expectancy`, Year, GDP, Population,Schooling, `thinness  1-19 years`))
+          select(`Life expectancy`, Year, GDP, 
+                 Population, Schooling, `thinness  1-19 years`))
 ```
 
-From the scatter plot matrix, we can observe the life expectancy increase when year increase, lowest life expectancy increase much more when GDP increase, not so affected by popylation. Very suprisingly, the schooling has the most positive correlation with life expectancy as 0.752, and from the scatter plot matrix there is a very clear linear trend between them. For the thinness 1-19 years, it is not a suprise to observe it has a negative correlation with life expectancy.
+From the scatter plot matrix, we can observe there is a slightly positive relationship between year and life expectancy.The life expectancy increase when year increase. Lowest life expectancy increase much more when GDP increase, so the GDP has a high effect on the life expectation. The life expectancy is not so affected by population. Very suprisingly, the schooling has the most positive correlation with life expectancy as 0.752, and from the scatter plot matrix there is a very clear linear trend between them. For the thinness 1-19 years, it is not a suprise to observe it has a slightly negative correlation with life expectancy.
 
-Here we obtain the correlation of all the continuous variables except time. There are several things to state:
+
+### Overview all num variables with life expectancy
+
+Then, we will independently create the scatterplot for each predictor to clearly and directly determine the relationship between life expectancy and numeric variables. Also, the overview will help the final summary from EDA better.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=Year, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Year vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Year and Life Expectancy. As Year increase, the life expectancy will slightly increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`Adult Mortality`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Adult Mortality vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between Adult Mortality and Life Expectancy. As adult mortality increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`infant deaths`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Infant Deaths vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between Infant Deaths and Life Expectancy. As infant deaths increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Alcohol, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Alcohol vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between Alcohol and Life Expectancy. As Alcohol increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`percentage expenditure`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Percentage Expenditure vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between percentage expenditure and Life Expectancy. As percentage expenditure increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`Hepatitis B`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Hepatitis B vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Hepatitis B and Life Expectancy. As Hepatitis B increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Measles, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Measles vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between Measles and Life Expectancy. As Measles increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= BMI, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of BMI vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between BMI and Life Expectancy. As BMI increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `under-five deaths`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of under-five deaths vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly negative relationship between under-five deaths and Life Expectancy. As under-five deaths increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Polio, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Polio vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Polio and Life Expectancy. As Polio increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `Total expenditure`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Total expenditure vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Total expenditure and Life Expectancy. As Total expenditure increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Diphtheria, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Diphtheria vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a slightly positive relationship between Diphtheria and Life Expectancy. As Diphtheria increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`HIV/AIDS`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of HIV/AIDS vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between HIV/AIDS and Life Expectancy. As HIV/AIDS increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= GDP, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of GDP vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a positive relationship between GDP and Life Expectancy. As GDP increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Population, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Population vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is almost no relationship between Population and Life Expectancy. 
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`thinness  1-19 years`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of thinness  1-19 years vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between thinness  1-19 years and Life Expectancy. As thinness  1-19 years increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x=`thinness 5-9 years`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of thinness 5-9 years vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously negative relationship between thinness 5-9 years and Life Expectancy. As thinness 5-9 years increase, the life expectancy will decrease.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= `Income composition of resources`, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Income composition of resources vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between Income composition of resources and Life Expectancy. As Income composition of resources increase, the life expectancy will increase.
+
+```{r}
+Life_Exp %>%
+  ggplot(aes(x= Schooling, y=`Life expectancy`)) + 
+  geom_point(alpha = 0.2) + 
+  labs(title = 'scatterplot of Schooling vs Life Expectancy') +
+  geom_smooth(method = 'lm', formula = 'y ~ x') +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+There is a obviously positive relationship between Schooling and Life Expectancy. As Schooling increase, the life expectancy will increase.
+
+
+## Correlation of all num variables
+
+First, we obtain the correlation matrix of all the continuous variables except time to take a rough look at positive or negative correlation.
+
+```{r}
+library(corrr)
+cor_life_exp <- Life_Exp %>%
+  select(-Country, -Year, -Status) %>%
+  correlate()
+rplot(cor_life_exp)
+```
+
+Next, we create a visualization of the matrix to further analyze the correlation among the variables. (With the specific correlation number, we can determine their correlation specifically.)
 
 ```{r, fig.height=6, fig.width=9}
-
 ggcorr(
   Life_Exp %>% select(-Country, -Year, -Status),
   cor_matrix = cor(Life_Exp %>% select(-Country, -Year, -Status), use = "pairwise"),
@@ -174,21 +465,24 @@ ggcorr(
     layout.exp = 3
 )
 ```
+There are several things to state:
 
 1. For the response variable life expectancy, the most negative correlated predictors are adult mortality, Hiv-aids and thinness. The most positive correlated predictors are schooling, income composition of resources, BMI and GDP. 
 
 2. The infant death has 1 correlation with under five deaths, so we should only include the under 5 death. Also, for the 2 thinness variables, we should only include 1 as their correlation is 0.9. Same with the percentage expenditure and GDP. We should not include all of these predictors, because otherwise colinearlity will be introduced. 
 
+
 Then when we exclude these variables, we  can obtain the remaining variables correlation network plot.
 
 ```{r, fig.height=5, fig.width=7}
-Life_Exp %>%
+corrr::correlate(Life_Exp %>%
    select(-Country, -Year, -Status, -`infant deaths`,
-   - `thinness 5-9 years`, -`Total expenditure`) %>% 
- corrr::correlate() %>% corrr::network_plot()
+   - `thinness 5-9 years`, -`Total expenditure`)) %>% corrr::network_plot()
 ```
 
-From this network we can observe that the 3 vaccinate variable: Polio, Diphtheria and Hepatitis B are close in correlation, GDP, percentage expenditure, schooling, Alcohol, BMI are close in correlation, Measles, under 5 deaths and thiness are close in correlation.
+From this network we can observe that the 3 vaccinate variable: Polio, Diphtheria and Hepatitis B are close in correlation. GDP, percentage expenditure, schooling, Alcohol, BMI are close in correlation. Measles, under 5 deaths and thiness are close in correlation.
+
+
 
 ## Summary from EDA
 
@@ -198,7 +492,11 @@ From this network we can observe that the 3 vaccinate variable: Polio, Diphtheri
 
 * Life expectancy does not have much correlation with population.
 
+* Counties in Europe, Oceania, and North America has higher life expectancy, and countries in Africa has lower life expectancy.
+
 * Developed countries has higher life expectancy than undeveloped countries.
+
+* Life Expectancy range from 44 to 89, and most concentrated on from 70 to 75. 
 
 
 # Preparation for modeling
